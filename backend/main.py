@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from scheduler.tasks import start_scheduler, stop_scheduler
+from scheduler.setup import start_scheduler, stop_scheduler
 from api.signals import router as signals_router
 from api.etf import router as etf_router
 from api.realtime import router as realtime_router

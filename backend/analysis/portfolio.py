@@ -154,3 +154,19 @@ def simulate(trades_by_code: dict[str, list[dict]],
         "open_positions": [{"code": c, "units": p["units"], "buy_date": p["buy_date"]}
                            for c, p in positions.items()],
     }
+
+
+def plan_next_day(
+    trades_by_code: dict[str, list[dict]],
+    price_map: dict[str, dict[str, float]],
+    dates: list[str],
+    execution_date: str,
+) -> list[dict]:
+    """用最近收盘价推演下一交易日仓位操作，不生成虚构成交价。"""
+    plan_dates = sorted(set([*dates, execution_date]))
+    result = simulate(trades_by_code, price_map, plan_dates)
+    return [
+        {key: value for key, value in trade.items() if key not in ("price", "amount")}
+        for trade in result["trade_log"]
+        if trade["date"] == execution_date
+    ]

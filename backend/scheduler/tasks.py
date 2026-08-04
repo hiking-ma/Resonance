@@ -1,14 +1,8 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
-
 from config import (
-    ETFS, REALTIME_INTERVAL_SEC, REFRESH_MIN_INTERVAL_SEC,
-    SENTIMENT_BACKFILL_DAYS, SENTIMENT_FETCH_HOUR, SENTIMENT_FETCH_MIN,
-    CALENDAR_SYNC_HOUR, CALENDAR_SYNC_MIN, CALENDAR_SYNC_DOW,
+    ETFS, REFRESH_MIN_INTERVAL_SEC, SENTIMENT_BACKFILL_DAYS,
 )
 from fetch.kline import fetch_kline, fetch_index_kline
 from fetch.realtime import fetch_realtime_quotes
@@ -19,18 +13,17 @@ from fetch.breadth import fetch_market_breadth
 from analysis.intraday import calc_intraday_signal, IntradaySignal
 from analysis.composite import analyze_single_etf
 from analysis.factors import calc_share_probability
-from store.database import init_db
 from store.daily_repo import upsert_daily, update_share_data, get_shares_by_date, shares_complete_for
 from store.realtime_repo import insert_snapshots, cleanup_old_snapshots
 from store.sentiment_repo import (
-    upsert_turnover, upsert_margin, get_turnover_count, get_margin_count,
-    get_turnover_series,
+    upsert_turnover, upsert_margin, get_turnover_series,
 )
 from store.calendar_repo import (
     upsert_trade_dates, get_calendar_count, get_range, get_last_trading_day, reload_cache,
 )
 from store.breadth_repo import upsert_breadth, get_latest_breadth_date
-from scheduler.time_guard import is_trading_time, trading_day_guard
+from scheduler.resonance_notify import task_notify_intraday_resonance
+from scheduler.time_guard import is_trading_time
 
 _kline_cache: dict[str, list[dict]] = {}
 _idx_kline_cache: list[dict] = []
@@ -38,9 +31,6 @@ _share_delta_cache: dict[str, dict] = {}
 _latest_signals: list[dict] = []
 _last_update: Optional[str] = None
 _last_manual_refresh: Optional[datetime] = None
-
-scheduler = AsyncIOScheduler()
-
 
 def get_latest_signals() -> list[dict]:
     return _latest_signals
@@ -135,6 +125,10 @@ def task_realtime_poll() -> None:
         _latest_signals = signals
         _last_update = now.strftime("%Y-%m-%dT%H:%M:%S")
         insert_snapshots(signals)
+        try:
+            task_notify_intraday_resonance(signals)
+        except Exception as exc:
+            print(f"[FEISHU] intraday resonance check failed (non-critical): {exc}")
 
 
 def task_intraday_update() -> dict:
@@ -292,89 +286,3 @@ def task_fetch_breadth() -> dict:
         return {"date": row["date"], "advance_pct": row.get("advance_pct")}
     print("[SCHEDULER] breadth fetch returned empty")
     return {}
-
-
-def start_scheduler() -> None:
-    init_db()
-    reload_cache()
-    if get_calendar_count() == 0:
-        task_sync_calendar()
-
-    task_preload_kline()
-    task_fetch_shares()
-
-    # 盘中启动时立即拉取当日数据
-    from scheduler.time_guard import is_trading_time
-    if is_trading_time(datetime.now()):
-        print("[SCHEDULER] trading hours detected, fetching today's data...")
-        try:
-            task_realtime_poll()
-            task_intraday_update()
-        except Exception as e:
-            print(f"[SCHEDULER] initial fetch failed (non-critical): {e}")
-
-    if get_turnover_count() == 0 or get_margin_count() == 0:
-        task_fetch_sentiment(backfill=True)
-
-    scheduler.add_job(
-        task_realtime_poll,
-        IntervalTrigger(seconds=REALTIME_INTERVAL_SEC),
-        id="realtime_poll",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        trading_day_guard(task_intraday_update),
-        IntervalTrigger(minutes=15),
-        id="intraday_update",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        trading_day_guard(task_preload_kline),
-        CronTrigger(hour=9, minute=0, day_of_week="mon-fri"),
-        id="preload_kline",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        trading_day_guard(task_daily_analysis),
-        CronTrigger(hour=15, minute=30, day_of_week="mon-fri"),
-        id="daily_analysis",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        trading_day_guard(task_fetch_shares),
-        CronTrigger(hour=19, minute=30, day_of_week="mon-fri"),
-        id="fetch_shares",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        task_cleanup,
-        CronTrigger(hour=2, minute=0),
-        id="cleanup",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        trading_day_guard(task_fetch_sentiment),
-        CronTrigger(hour=SENTIMENT_FETCH_HOUR, minute=SENTIMENT_FETCH_MIN, day_of_week="mon-fri"),
-        id="fetch_sentiment",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        trading_day_guard(task_fetch_breadth),
-        CronTrigger(hour=16, minute=30, day_of_week="mon-fri"),
-        id="fetch_breadth",
-        replace_existing=True,
-    )
-    scheduler.add_job(
-        task_sync_calendar,
-        CronTrigger(day_of_week=CALENDAR_SYNC_DOW, hour=CALENDAR_SYNC_HOUR, minute=CALENDAR_SYNC_MIN),
-        id="sync_calendar",
-        replace_existing=True,
-    )
-    scheduler.start()
-    print("[SCHEDULER] started")
-
-
-def stop_scheduler() -> None:
-    if scheduler.running:
-        scheduler.shutdown(wait=False)
-        print("[SCHEDULER] stopped")

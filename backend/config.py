@@ -98,6 +98,13 @@ TURNOVER_FETCH_SLEEP_SEC = 0.1     # 成交额逐日akshare间隔(秒,限流保�
 JOB_LIST_LIMIT = 30                # /api/data/jobs 返回的最大历史条数
 JOB_DAYS_MAX = 1000                # 回填深度参数上限
 
+# 飞书共振通知（webhook 仅从环境变量读取，禁止写入仓库）
+FEISHU_WEBHOOK_URL = os.environ.get("FEISHU_WEBHOOK_URL", "").strip()
+FEISHU_NOTIFY_HOUR = 19
+FEISHU_NOTIFY_MIN = 40
+FEISHU_NOTIFY_TIMEOUT_SEC = 10
+FEISHU_RETRY_COOLDOWN_SEC = 300
+
 # 交易策略 / 回测模块
 STRATEGY_CODE = "510300"           # 默认策略标的
 WARN_RED_N = 2                     # 红灯≥此数→预警

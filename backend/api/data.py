@@ -18,7 +18,7 @@ from store.sentiment_repo import (
     get_turnover_count, get_margin_count, get_turnover_series, get_margin_series,
 )
 from store.calendar_repo import get_calendar_count, get_range, get_last_sync
-from scheduler.tasks import scheduler
+from scheduler.setup import scheduler
 from scheduler.job_manager import job_manager, run_job
 from scheduler.job_registry import JOB_DEFS, JOB_FNS
 

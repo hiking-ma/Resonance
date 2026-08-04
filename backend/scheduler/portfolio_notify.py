@@ -1,0 +1,113 @@
+from datetime import datetime, timedelta
+
+from analysis.portfolio import plan_next_day
+from analysis.portfolio_signals import ALL_CODES, build_trades_by_code
+from config import (
+    ETFS, FEISHU_NOTIFY_HOUR, FEISHU_NOTIFY_MIN, FEISHU_WEBHOOK_URL,
+)
+from notify.feishu import send_feishu_text
+from store.calendar_repo import (
+    get_last_trading_day, get_next_trading_day, is_trading_day,
+)
+from store.daily_repo import get_by_code, get_trading_dates
+from store.notification_repo import mark_notified, was_notified
+from store.sentiment_repo import get_margin_series, get_turnover_series
+
+KIND_LABEL = {
+    "BUY": "买入至 12.5%",
+    "TOPUP": "加仓至 25%",
+    "REDUCE": "减仓至 12.5%",
+    "SELL": "清仓",
+}
+
+
+def _reason_for(item: dict, trades: dict[str, list[dict]]) -> str:
+    if item["kind"] == "REDUCE":
+        return "为新的买入信号释放组合资金"
+    if item["kind"] == "TOPUP":
+        return "组合余钱按最近买入优先规则补足仓位"
+    action = "BUY" if item["kind"] == "BUY" else "SELL"
+    match = next((
+        trade for trade in trades.get(item["code"], [])
+        if trade["date"] == item.get("signal_date")
+        and trade["action"] == action
+    ), None)
+    if match and match.get("reason"):
+        return str(match["reason"])
+    return "策略买入信号" if action == "BUY" else "策略卖出信号"
+
+
+def _expected_signal_date(now: datetime) -> str:
+    today = now.strftime("%Y-%m-%d")
+    cutoff_passed = (now.hour, now.minute) >= (
+        FEISHU_NOTIFY_HOUR, FEISHU_NOTIFY_MIN,
+    )
+    if is_trading_day(today) and not cutoff_passed:
+        yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        return get_last_trading_day(yesterday)
+    return get_last_trading_day(today)
+
+
+def _build_plan(signal_date: str) -> tuple[str, list[dict]]:
+    execution_date = get_next_trading_day(signal_date)
+    rows_by_code = {
+        code: list(reversed(get_by_code(code))) for code in ALL_CODES
+    }
+    trades = build_trades_by_code(
+        rows_by_code, get_turnover_series(), get_margin_series(),
+    )
+    prices = {
+        code: {
+            row["date"]: row.get("close_price")
+            for row in rows_by_code[code]
+            if row.get("close_price") is not None
+        }
+        for code in ALL_CODES
+    }
+    dates = [date for date in get_trading_dates() if date <= signal_date]
+    plan = plan_next_day(trades, prices, dates, execution_date)
+    for item in plan:
+        item["reason"] = _reason_for(item, trades)
+    return execution_date, plan
+
+
+def _message(signal_date: str, execution_date: str, plan: list[dict]) -> str:
+    lines = [
+        "📋 次交易日操作计划",
+        f"信号日：{signal_date}",
+        f"计划执行日：{execution_date}",
+    ]
+    for item in plan:
+        code = item["code"]
+        name = ETFS.get(code, {}).get("name", code)
+        label = KIND_LABEL.get(item["kind"], item["kind"])
+        lines.append(f"• {name}（{code}）：{label}")
+        lines.append(f"  原因：{item['reason']}")
+    lines.extend([
+        "成交价与金额以计划执行日实际行情为准。",
+        "本消息为量化策略计划，不构成投资建议。",
+    ])
+    return "\n".join(lines)
+
+
+def task_notify_next_day_plan() -> dict:
+    if not FEISHU_WEBHOOK_URL:
+        print("[FEISHU] FEISHU_WEBHOOK_URL not configured, plan skipped")
+        return {"status": "disabled", "sent": 0}
+    signal_date = _expected_signal_date(datetime.now())
+    available_dates = get_trading_dates()
+    if not available_dates or available_dates[-1] != signal_date:
+        return {"status": "stale", "signal_date": signal_date, "sent": 0}
+    execution_date, plan = _build_plan(signal_date)
+    if not plan:
+        return {"status": "no_action", "signal_date": signal_date, "sent": 0}
+    event_key = f"portfolio-plan:{signal_date}:{execution_date}"
+    if was_notified(event_key):
+        return {"status": "duplicate", "signal_date": signal_date, "sent": 0}
+    if not send_feishu_text(
+        FEISHU_WEBHOOK_URL, _message(signal_date, execution_date, plan),
+    ):
+        return {"status": "failed", "signal_date": signal_date, "sent": 0}
+    mark_notified(event_key, "feishu")
+    print(f"[FEISHU] next-day plan sent: {signal_date} -> {execution_date}")
+    return {"status": "ok", "signal_date": signal_date, "sent": 1}

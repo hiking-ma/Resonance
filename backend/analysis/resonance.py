@@ -124,6 +124,46 @@ def turnover_value(row: dict):
     return v
 
 
+def _latest_percentile(rows: list[dict], value_key: str) -> float | None:
+    values = [turnover_value(row) if value_key == "turnover"
+              else row.get(value_key) for row in rows]
+    percentiles = percentile_series(
+        [row.get("date") for row in rows],
+        values,
+        SENTIMENT_ZONE_WINDOW,
+        SENTIMENT_ZONE_MIN_PTS,
+    )
+    if not percentiles:
+        return None
+    latest_date = max(percentiles)
+    return percentiles[latest_date].get("percentile")
+
+
+def compute_live_resonance(
+    code: str, signal: dict, turnover_rows: list[dict],
+    margin_rows: list[dict], timestamp: str,
+) -> dict:
+    turn_p = _latest_percentile(turnover_rows, "turnover")
+    margin_p = _latest_percentile(margin_rows, "fin_balance_yi")
+    states = eval_day(signal, turn_p, margin_p)
+    red = sum(1 for state in states.values() if state == RED)
+    green = sum(1 for state in states.values() if state == GREEN)
+    total = len(INDICATORS)
+    return {
+        "code": code,
+        "name": ETFS.get(code, {}).get("name", code),
+        "date": timestamp[:10],
+        "timestamp": timestamp,
+        "indicators": _current_indicators(signal, turn_p, margin_p, states),
+        "red_count": red,
+        "green_count": green,
+        "gray_count": total - red - green,
+        "total": total,
+        "verdict": verdict_of(red, green),
+        "history": [],
+    }
+
+
 def compute_resonance(code: str, etf_rows: list, turnover_rows: list,
                       margin_rows: list, window: int = SENTIMENT_ZONE_WINDOW,
                       min_pts: int = SENTIMENT_ZONE_MIN_PTS) -> dict:

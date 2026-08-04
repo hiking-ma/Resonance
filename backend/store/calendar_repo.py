@@ -17,6 +17,18 @@ def get_last_trading_day(date: str) -> str:
     return d.strftime("%Y-%m-%d")
 
 
+def get_next_trading_day(date: str) -> str:
+    """date 之后的首个交易日（日历缺失时按周末顺延）。"""
+    days = get_trade_days(date, None)
+    future = [day for day in days if day > date]
+    if future:
+        return future[0]
+    current = datetime.strptime(date, "%Y-%m-%d") + timedelta(days=1)
+    while current.weekday() >= 5:
+        current += timedelta(days=1)
+    return current.strftime("%Y-%m-%d")
+
+
 def upsert_trade_dates(dates: list[str]) -> None:
     if not dates:
         return

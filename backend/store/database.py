@@ -106,6 +106,12 @@ def init_db() -> None:
                 created_at      TEXT DEFAULT (datetime('now','localtime')),
                 updated_at      TEXT DEFAULT (datetime('now','localtime'))
             );
+
+            CREATE TABLE IF NOT EXISTS notification_log (
+                event_key       TEXT PRIMARY KEY,
+                channel         TEXT NOT NULL,
+                sent_at         TEXT DEFAULT (datetime('now','localtime'))
+            );
         """)
         _migrate_add_direction_columns(conn)
         _migrate_drop_etf_kline(conn)
