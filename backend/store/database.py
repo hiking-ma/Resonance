@@ -112,6 +112,37 @@ def init_db() -> None:
                 channel         TEXT NOT NULL,
                 sent_at         TEXT DEFAULT (datetime('now','localtime'))
             );
+
+            CREATE TABLE IF NOT EXISTS live_portfolio_config (
+                id              INTEGER PRIMARY KEY CHECK (id = 1),
+                inception_date  TEXT NOT NULL,
+                initialized_at  TEXT DEFAULT (datetime('now','localtime'))
+            );
+
+            CREATE TABLE IF NOT EXISTS live_positions (
+                code            TEXT PRIMARY KEY,
+                units           INTEGER NOT NULL CHECK (units IN (1, 2)),
+                opened_date     TEXT NOT NULL,
+                last_action_date TEXT NOT NULL,
+                updated_at      TEXT DEFAULT (datetime('now','localtime'))
+            );
+
+            CREATE TABLE IF NOT EXISTS live_trade_plans (
+                id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                signal_date     TEXT NOT NULL,
+                execution_date  TEXT NOT NULL,
+                code            TEXT NOT NULL,
+                kind            TEXT NOT NULL,
+                target_units    INTEGER NOT NULL CHECK (target_units BETWEEN 0 AND 2),
+                reason          TEXT NOT NULL,
+                status          TEXT NOT NULL DEFAULT 'pending',
+                created_at      TEXT DEFAULT (datetime('now','localtime')),
+                resolved_at     TEXT,
+                UNIQUE(signal_date, execution_date, code, kind)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_live_plans_status
+            ON live_trade_plans(status, execution_date);
         """)
         _migrate_add_direction_columns(conn)
         _migrate_drop_etf_kline(conn)

@@ -1,4 +1,5 @@
 import type { SignalResponse, EtfHistoryResponse, EtfInfo, RealtimeStatus, StatsResponse, SentimentOverview, SentimentRefreshResult, EtfRefreshResult, CalendarDays, CalendarRefreshResult, ResonanceOverview, ResonanceDayDetail, TradesResponse, DataStatus, JobState, StartJobRequest, StartJobResponse, PortfolioBacktestResponse } from './types'
+import type { LivePortfolioConfig, LivePortfolioState, LiveTradePlan } from './livePortfolioTypes'
 
 const BASE = '/api'
 
@@ -92,6 +93,22 @@ export function fetchDataStatus(): Promise<DataStatus> {
 
 export function fetchPortfolioBacktest(): Promise<PortfolioBacktestResponse> {
   return get('/portfolio/backtest')
+}
+
+export function fetchLivePortfolio(): Promise<LivePortfolioState> {
+  return get('/live-portfolio')
+}
+
+export function initializeLivePortfolio(inceptionDate: string): Promise<LivePortfolioConfig> {
+  return post('/live-portfolio/initialize', { inception_date: inceptionDate })
+}
+
+export function confirmLivePlan(planId: number): Promise<LiveTradePlan> {
+  return post(`/live-portfolio/plans/${planId}/confirm`)
+}
+
+export function skipLivePlan(planId: number): Promise<LiveTradePlan> {
+  return post(`/live-portfolio/plans/${planId}/skip`)
 }
 
 export function fetchDataJobs(): Promise<JobState[]> {

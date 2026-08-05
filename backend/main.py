@@ -12,6 +12,13 @@ from api.calendar import router as calendar_router
 from api.resonance import router as resonance_router
 from api.data import router as data_router
 from api.portfolio import router as portfolio_router
+from api.live_portfolio import router as live_portfolio_router
+
+ROUTERS = (
+    signals_router, etf_router, realtime_router, stats_router, sentiment_router,
+    calendar_router, resonance_router, data_router, portfolio_router,
+    live_portfolio_router,
+)
 
 
 @asynccontextmanager
@@ -21,12 +28,9 @@ async def lifespan(app: FastAPI):
     stop_scheduler()
 
 
-app = FastAPI(
-    title="ETF 国家队监控系统",
-    description="三因子 ETF 国家队资金监测 — 盘中实时信号",
-    version="1.0.0",
-    lifespan=lifespan,
-)
+app = FastAPI(title="ETF 国家队监控系统",
+              description="三因子 ETF 国家队资金监测 — 盘中实时信号",
+              version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,15 +40,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(signals_router)
-app.include_router(etf_router)
-app.include_router(realtime_router)
-app.include_router(stats_router)
-app.include_router(sentiment_router)
-app.include_router(calendar_router)
-app.include_router(resonance_router)
-app.include_router(data_router)
-app.include_router(portfolio_router)
+for router in ROUTERS:
+    app.include_router(router)
 
 
 @app.get("/api/health")

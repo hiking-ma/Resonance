@@ -7,6 +7,7 @@ import TradeCalendar from './pages/TradeCalendar'
 import Resonance from './pages/Resonance'
 import KlineCompare from './pages/KlineCompare'
 import PortfolioBacktest from './pages/PortfolioBacktest'
+import LivePortfolio from './pages/LivePortfolio'
 import DataManage from './pages/DataManage'
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/resonance" element={<Resonance />} />
           <Route path="/compare" element={<KlineCompare />} />
           <Route path="/portfolio" element={<PortfolioBacktest />} />
+          <Route path="/live-portfolio" element={<LivePortfolio />} />
           <Route path="/sentiment" element={<Sentiment />} />
           <Route path="/calendar" element={<TradeCalendar />} />
           <Route path="/data" element={<DataManage />} />
