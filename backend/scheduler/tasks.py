@@ -22,7 +22,6 @@ from store.calendar_repo import (
     upsert_trade_dates, get_calendar_count, get_range, get_last_trading_day, reload_cache,
 )
 from store.breadth_repo import upsert_breadth, get_latest_breadth_date
-from scheduler.resonance_notify import task_notify_intraday_resonance
 from scheduler.time_guard import is_trading_time
 
 _kline_cache: dict[str, list[dict]] = {}
@@ -125,10 +124,6 @@ def task_realtime_poll() -> None:
         _latest_signals = signals
         _last_update = now.strftime("%Y-%m-%dT%H:%M:%S")
         insert_snapshots(signals)
-        try:
-            task_notify_intraday_resonance(signals)
-        except Exception as exc:
-            print(f"[FEISHU] intraday resonance check failed (non-critical): {exc}")
 
 
 def task_intraday_update() -> dict:

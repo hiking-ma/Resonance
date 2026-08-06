@@ -7,10 +7,12 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from config import (
     CALENDAR_SYNC_DOW, CALENDAR_SYNC_HOUR, CALENDAR_SYNC_MIN,
-    FEISHU_NOTIFY_HOUR, FEISHU_NOTIFY_MIN, REALTIME_INTERVAL_SEC,
+    FEISHU_NOTIFY_HOUR, FEISHU_NOTIFY_MIN,
+    FEISHU_RESONANCE_HOUR, FEISHU_RESONANCE_MIN, REALTIME_INTERVAL_SEC,
     SENTIMENT_FETCH_HOUR, SENTIMENT_FETCH_MIN,
 )
 from scheduler.portfolio_notify import task_notify_next_day_plan
+from scheduler.resonance_notify import task_notify_resonance_snapshot
 from scheduler.tasks import (
     task_cleanup, task_daily_analysis, task_fetch_breadth, task_fetch_sentiment,
     task_fetch_shares, task_intraday_update, task_preload_kline,
@@ -40,10 +42,6 @@ def _bootstrap() -> None:
             print(f"[SCHEDULER] initial fetch failed (non-critical): {exc}")
     if get_turnover_count() == 0 or get_margin_count() == 0:
         task_fetch_sentiment(backfill=True)
-    try:
-        task_notify_next_day_plan()
-    except Exception as exc:
-        print(f"[FEISHU] initial next-day plan check failed (non-critical): {exc}")
 
 
 def _add_trading_cron(
@@ -71,6 +69,8 @@ def _register_jobs() -> None:
         replace_existing=True,
     )
     _add_trading_cron(task_preload_kline, "preload_kline", 9, 0)
+    _add_trading_cron(task_notify_resonance_snapshot, "notify_resonance_snapshot",
+                      FEISHU_RESONANCE_HOUR, FEISHU_RESONANCE_MIN)
     _add_trading_cron(task_daily_analysis, "daily_analysis", 15, 30)
     _add_trading_cron(task_fetch_sentiment, "fetch_sentiment",
                       SENTIMENT_FETCH_HOUR, SENTIMENT_FETCH_MIN)
