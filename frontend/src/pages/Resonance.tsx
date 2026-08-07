@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import { useResonance } from '../hooks/useResonance'
-import { useSentiment } from '../hooks/useSentiment'
+import { useResonance, useResonanceDay } from '../hooks/useResonance'
 import { fetchEtfList, fetchEtfHistory, fetchResonanceTrades } from '../api/client'
 import ResonanceLights from '../components/ResonanceLights'
 import ResonanceKline from '../components/ResonanceKline'
@@ -10,109 +8,10 @@ import ResonanceChart from '../components/ResonanceChart'
 import ResonanceHeatmap from '../components/ResonanceHeatmap'
 import ResonanceEvidencePanel, { type ResonanceSelection } from '../components/ResonanceEvidencePanel'
 import ResonanceMethodNote from '../components/ResonanceMethodNote'
-import SentimentLineChart from '../components/SentimentLineChart'
+import MarketSentimentSection from '../components/MarketSentimentSection'
 import { DEFAULT_VISIBLE_BARS, type DateWindow } from '../components/chartZoom'
-import type { ZoneKey } from '../api/types'
 
 const KLINE_DAYS = 640
-
-const ZONE_TEXT: Record<ZoneKey, string> = {
-  danger: 'text-red-400',
-  neutral: 'text-amber-400',
-  safe: 'text-green-400',
-}
-
-function MarketSentimentSection({ selectedDate, onSelectDate, dateWindow, onZoomChange, minDate }: {
-  selectedDate: string | null
-  onSelectDate: (date: string) => void
-  dateWindow: DateWindow | null
-  onZoomChange: (w: DateWindow) => void
-  minDate: string | null
-}) {
-  const { data, isLoading, error } = useSentiment()
-
-  if (error) {
-    return (
-      <div className="bg-gray-900 border border-gray-800 rounded-lg py-6 text-center text-xs text-gray-600">
-        情绪数据加载失败
-      </div>
-    )
-  }
-  if (isLoading || !data) {
-    return (
-      <div className="bg-gray-900 border border-gray-800 rounded-lg py-10 text-center text-sm text-gray-500">
-        情绪数据加载中...
-      </div>
-    )
-  }
-
-  const turnover = minDate ? data.turnover.filter(p => p.date >= minDate) : data.turnover
-  const margin = minDate ? data.margin.filter(p => p.date >= minDate) : data.margin
-  const dates = turnover.map(p => p.date)
-  const marginByDate = new Map(margin.map(p => [p.date, p]))
-  const marginLine = dates.map(d => marginByDate.get(d)?.fin_balance_yi ?? null)
-  const marginBar = dates.map(d => marginByDate.get(d)?.net_fin_buy_yi ?? null)
-  const cur = data.zone.current
-
-  return (
-    <div>
-      <div className="flex items-center gap-3 mb-2 flex-wrap">
-        <h3 className="text-sm font-medium text-gray-300">市场情绪走势（成交额热度 / 融资杠杆两灯的底层数据）</h3>
-        {cur && (
-          <span className="text-xs text-gray-500">
-            情绪分区 <b className={ZONE_TEXT[cur.zone]}>{cur.label}</b>
-            · 成交额 {cur.turnover.percentile.toFixed(0)}% 分位
-            · 融资 {cur.margin.percentile.toFixed(0)}% 分位
-          </span>
-        )}
-        <Link to="/sentiment" className="ml-auto text-xs text-gray-500 hover:text-gray-300 transition-colors">
-          查看详情 →
-        </Link>
-      </div>
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <div className="text-xs text-gray-500 mb-1">两市成交额(万亿) · MA5</div>
-          <SentimentLineChart
-            dates={dates}
-            height={240}
-            yFormatter={v => (v / 10000).toFixed(4)}
-            lineTip={v => `${(v / 10000).toFixed(4)} 万亿`}
-            selectedDate={selectedDate}
-            onSelectDate={onSelectDate}
-            dateWindow={dateWindow}
-            onZoomChange={onZoomChange}
-            lines={[
-              { name: '成交额', data: turnover.map(p => p.total_amount_yi), color: '#3b82f6', width: 1.5 },
-              { name: 'MA5', data: turnover.map(p => p.ma5_yi), color: '#f59e0b', width: 1.2 },
-            ]}
-          />
-        </div>
-        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-          <div className="text-xs text-gray-500 mb-1">融资余额(万亿) · 净买入(亿)</div>
-          <SentimentLineChart
-            dates={dates}
-            height={240}
-            yFormatter={v => (v / 10000).toFixed(4)}
-            lineTip={v => `${(v / 10000).toFixed(4)} 万亿`}
-            barFormatter={v => v.toFixed(0)}
-            selectedDate={selectedDate}
-            onSelectDate={onSelectDate}
-            dateWindow={dateWindow}
-            onZoomChange={onZoomChange}
-            lines={[
-              { name: '融资余额', data: marginLine, color: '#a855f7', width: 1.5 },
-            ]}
-            bars={{
-              name: '净买入',
-              data: marginBar,
-              colorFor: v => (v >= 0 ? '#ef4444' : '#22c55e'),
-            }}
-          />
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default function Resonance() {
   const [code, setCode] = useState('510300')
@@ -140,6 +39,9 @@ export default function Resonance() {
   const tradeDates = history?.kline.map(k => k.date) ?? []
   const klineStart = tradeDates[0] ?? null
   const displayDate = selected?.date ?? data?.date ?? tradeDates[tradeDates.length - 1] ?? ''
+  const { data: dayDetail, isFetching: dayFetching, isError: dayError } =
+    useResonanceDay(code, displayDate || null)
+  const lightsData = dayDetail && dayDetail.date === displayDate ? dayDetail : null
   const curIdx = displayDate ? tradeDates.indexOf(displayDate) : -1
   const canPrev = curIdx === -1 ? tradeDates.length > 1 : curIdx > 0
   const canNext = curIdx >= 0 && curIdx < tradeDates.length - 1
@@ -180,7 +82,7 @@ export default function Resonance() {
   }
 
   const selectLight = (key: string) => {
-    if (data?.date) setSelected({ date: data.date, indicator: key })
+    if (displayDate) setSelected({ date: displayDate, indicator: key })
   }
   const selectDate = (date: string) => setSelected({ date, indicator: null })
   const selectCell = (date: string, indicator: string) => setSelected({ date, indicator })
@@ -235,14 +137,17 @@ export default function Resonance() {
         <span className="ml-auto text-[11px] text-gray-600">逐日回放练盘感（键盘 ← → 亦可）· 点选/缩放任意图表，全部联动</span>
       </div>
 
-      {/* V1: 红绿灯面板 */}
-      {data ? (
+      {lightsData ? (
         <ResonanceLights
-          data={data}
-          selectedKey={selected?.date === data.date ? selected?.indicator ?? null : null}
+          data={lightsData}
+          selectedKey={selected?.date === lightsData.date ? selected?.indicator ?? null : null}
           onSelect={selectLight}
         />
-      ) : null}
+      ) : (
+        <div className="bg-gray-900 border border-gray-800 rounded-lg py-8 text-center text-sm text-gray-500">
+          {dayError ? `${displayDate} 暂无共振明细` : dayFetching ? `${displayDate} 红绿灯加载中...` : '红绿灯加载中...'}
+        </div>
+      )}
 
       <MarketSentimentSection
         selectedDate={selected?.date ?? null}
@@ -276,27 +181,27 @@ export default function Resonance() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-300 mb-2">红绿灯走势（点击柱查看当日依据）</h3>
-            <ResonanceChart
-              history={resonanceHistory}
-              selectedDate={selected?.date ?? null}
-              onSelectDate={selectDate}
-              dateWindow={dateWindow}
-              onZoomChange={handleZoom}
-            />
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-300 mb-2">指标状态热力图（点击单元格查看依据）</h3>
-            <ResonanceHeatmap
-              data={{ ...data!, history: resonanceHistory }}
-              selectedDate={selected?.date ?? null}
-              onSelect={selectCell}
-              dateWindow={dateWindow}
-              onZoomChange={handleZoom}
-            />
-          </div>
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-gray-300 mb-2">红绿灯走势（点击柱查看当日依据）</h3>
+          <ResonanceChart
+            history={resonanceHistory}
+            selectedDate={selected?.date ?? null}
+            onSelectDate={selectDate}
+            dateWindow={dateWindow}
+            onZoomChange={handleZoom}
+          />
         </div>
+        <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <h3 className="text-sm font-medium text-gray-300 mb-2">指标状态热力图（点击单元格查看依据）</h3>
+          <ResonanceHeatmap
+            data={{ ...data!, history: resonanceHistory }}
+            selectedDate={selected?.date ?? null}
+            onSelect={selectCell}
+            dateWindow={dateWindow}
+            onZoomChange={handleZoom}
+          />
+        </div>
+      </div>
 
       <ResonanceEvidencePanel
         code={code}

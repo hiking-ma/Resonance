@@ -1,4 +1,16 @@
-import type { ResonanceOverview, ResonanceIndicator, LightState } from '../api/types'
+import type { ResonanceIndicator, LightState } from '../api/types'
+
+/** overview 与 day 明细共用的红绿灯字段 */
+export interface ResonanceLightsData {
+  code: string
+  name: string
+  date: string | null
+  indicators: ResonanceIndicator[]
+  red_count: number
+  green_count: number
+  gray_count: number
+  verdict: string
+}
 
 const LIGHT_STYLES: Record<LightState, { dot: string; card: string; text: string }> = {
   red: { dot: 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.7)]', card: 'border-red-500/40', text: 'text-red-400' },
@@ -69,7 +81,7 @@ function LightGroup({ title, items, selectedKey, onSelect }: {
 }
 
 export default function ResonanceLights({ data, selectedKey, onSelect }: {
-  data: ResonanceOverview
+  data: ResonanceLightsData
   selectedKey: string | null
   onSelect: (key: string) => void
 }) {

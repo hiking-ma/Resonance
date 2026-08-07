@@ -16,7 +16,8 @@ export function useResonanceDay(code: string, date: string | null) {
     queryKey: ['resonance', code, 'day', date],
     queryFn: () => fetchResonanceDay(code, date as string),
     enabled: !!date,
-    placeholderData: keepPreviousData,
+    // 不保留上一日占位：红绿灯必须与选中日期严格一致
+    placeholderData: undefined,
     refetchInterval: false,
     refetchIntervalInBackground: false,
   })
