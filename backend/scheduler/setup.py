@@ -8,10 +8,13 @@ from apscheduler.triggers.interval import IntervalTrigger
 from config import (
     CALENDAR_SYNC_DOW, CALENDAR_SYNC_HOUR, CALENDAR_SYNC_MIN,
     FEISHU_NOTIFY_HOUR, FEISHU_NOTIFY_MIN,
+    FEISHU_PLAN_PREFETCH_HOUR, FEISHU_PLAN_PREFETCH_MIN,
     FEISHU_RESONANCE_HOUR, FEISHU_RESONANCE_MIN, REALTIME_INTERVAL_SEC,
     SENTIMENT_FETCH_HOUR, SENTIMENT_FETCH_MIN,
 )
-from scheduler.portfolio_notify import task_notify_next_day_plan
+from scheduler.portfolio_notify import (
+    task_notify_next_day_plan, task_prefetch_plan_data,
+)
 from scheduler.resonance_notify import task_notify_resonance_snapshot
 from scheduler.tasks import (
     task_cleanup, task_daily_analysis, task_fetch_breadth, task_fetch_sentiment,
@@ -76,6 +79,8 @@ def _register_jobs() -> None:
                       SENTIMENT_FETCH_HOUR, SENTIMENT_FETCH_MIN)
     _add_trading_cron(task_fetch_breadth, "fetch_breadth", 16, 30)
     _add_trading_cron(task_fetch_shares, "fetch_shares", 19, 30)
+    _add_trading_cron(task_prefetch_plan_data, "prefetch_plan_data",
+                      FEISHU_PLAN_PREFETCH_HOUR, FEISHU_PLAN_PREFETCH_MIN)
     _add_trading_cron(task_notify_next_day_plan, "notify_next_day_plan",
                       FEISHU_NOTIFY_HOUR, FEISHU_NOTIFY_MIN)
     scheduler.add_job(

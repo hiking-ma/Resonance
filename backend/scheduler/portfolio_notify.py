@@ -6,9 +6,7 @@ from config import (
     ETFS, FEISHU_NOTIFY_HOUR, FEISHU_NOTIFY_MIN, FEISHU_WEBHOOK_URL,
 )
 from notify.feishu import send_feishu_text
-from store.calendar_repo import (
-    get_last_trading_day, get_next_trading_day, is_trading_day,
-)
+from store.calendar_repo import get_last_trading_day, get_next_trading_day
 from store.daily_repo import get_by_code, get_trading_dates, shares_complete_for
 from store.live_portfolio_repo import (
     create_live_plans, get_live_config, get_live_plans, get_live_positions,
@@ -28,15 +26,11 @@ KIND_LABEL = {
 PLAN_TIME = f"{FEISHU_NOTIFY_HOUR:02d}:{FEISHU_NOTIFY_MIN:02d}"
 
 
-def _expected_signal_date(now: datetime) -> str:
-    today = now.strftime("%Y-%m-%d")
-    cutoff_passed = (now.hour, now.minute) >= (
-        FEISHU_NOTIFY_HOUR, FEISHU_NOTIFY_MIN,
-    )
-    if is_trading_day(today) and not cutoff_passed:
-        yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-        return get_last_trading_day(yesterday)
-    return get_last_trading_day(today)
+def previous_signal_date(now: datetime | None = None) -> str:
+    """开盘前计划：信号日固定为上一交易日（周一对应上周五）。"""
+    now = now or datetime.now()
+    yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    return get_last_trading_day(yesterday)
 
 
 def _build_plan(signal_date: str) -> tuple[str, list[dict]]:
@@ -63,7 +57,7 @@ def _data_note(signal_date: str) -> str:
 
 def _message(signal_date: str, execution_date: str, plan: list[dict]) -> str:
     lines = [
-        "📋 次交易日操作计划",
+        "📋 今日操作计划",
         f"信号日：{signal_date}",
         f"计划执行日：{execution_date}",
     ]
@@ -83,7 +77,7 @@ def _message(signal_date: str, execution_date: str, plan: list[dict]) -> str:
 
 def _no_action_message(signal_date: str, execution_date: str) -> str:
     return "\n".join([
-        "📋 次交易日操作计划 · 无操作",
+        "📋 今日操作计划 · 无操作",
         f"信号日：{signal_date}",
         f"计划执行日：{execution_date}",
         _data_note(signal_date),
@@ -122,6 +116,22 @@ def _send_summary(event_key: str, text: str, status: str) -> dict:
     return {"status": status, "sent": 1}
 
 
+def task_prefetch_plan_data() -> dict:
+    """08:00 补拉份额与情绪，提高 08:30 出计划成功率。"""
+    from scheduler.tasks import task_fetch_sentiment, task_fetch_shares
+    signal_date = previous_signal_date()
+    print(f"[SCHEDULER] prefetch plan data (signal_date={signal_date})")
+    task_fetch_shares()
+    sentiment = task_fetch_sentiment(backfill=False)
+    ready, missing = _data_ready(signal_date)
+    return {
+        "signal_date": signal_date,
+        "ready": ready,
+        "missing": missing or "",
+        "sentiment": sentiment,
+    }
+
+
 def task_notify_next_day_plan() -> dict:
     if not FEISHU_WEBHOOK_URL:
         print("[FEISHU] FEISHU_WEBHOOK_URL not configured, plan skipped")
@@ -132,27 +142,37 @@ def task_notify_next_day_plan() -> dict:
         return {"status": "duplicate", "sent": 0}
     config = get_live_config()
     if not config:
-        text = f"⚠️ {PLAN_TIME} 次日计划未生成\n原因：“我的仓位”尚未初始化。"
+        text = f"⚠️ {PLAN_TIME} 今日计划未生成\n原因：“我的仓位”尚未初始化。"
         return _send_summary(event_key, text, "not_initialized")
     existing = get_live_plans("pending")
     if existing:
         return _send_summary(event_key, _pending_message(existing), "pending")
-    signal_date = _expected_signal_date(datetime.now())
+    signal_date = previous_signal_date()
     execution_date = get_next_trading_day(signal_date)
+    ready, missing = _data_ready(signal_date)
+    if not ready:
+        print(f"[FEISHU] data incomplete ({missing}), retry prefetch once")
+        task_prefetch_plan_data()
+    return _emit_plan(event_key, config, signal_date, execution_date)
+
+
+def _emit_plan(
+    event_key: str, config: dict, signal_date: str, execution_date: str,
+) -> dict:
     if signal_date <= config["inception_date"]:
         text = _no_action_message(signal_date, execution_date)
         return _send_summary(event_key, text, "before_inception")
     available_dates = get_trading_dates()
-    if not available_dates or available_dates[-1] != signal_date:
+    if signal_date not in available_dates:
         text = (
-            f"⚠️ {PLAN_TIME} 次日计划未生成\n信号日：{signal_date}\n"
-            "原因：当日策略日线尚未就绪。"
+            f"⚠️ {PLAN_TIME} 今日计划未生成\n信号日：{signal_date}\n"
+            "原因：信号日策略日线尚未就绪。"
         )
         return _send_summary(event_key, text, "stale")
     ready, missing = _data_ready(signal_date)
     if not ready:
         text = (
-            f"⚠️ {PLAN_TIME} 次日计划未生成\n信号日：{signal_date}\n"
+            f"⚠️ {PLAN_TIME} 今日计划未生成\n信号日：{signal_date}\n"
             f"原因：{missing}尚未就绪。"
         )
         return _send_summary(event_key, text, "data_incomplete")
