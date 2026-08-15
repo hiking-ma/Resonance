@@ -8,10 +8,12 @@ from apscheduler.triggers.interval import IntervalTrigger
 from config import (
     CALENDAR_SYNC_DOW, CALENDAR_SYNC_HOUR, CALENDAR_SYNC_MIN,
     FEISHU_NOTIFY_HOUR, FEISHU_NOTIFY_MIN,
+    FEISHU_PERPETUAL_HOUR, FEISHU_PERPETUAL_MIN,
     FEISHU_PLAN_PREFETCH_HOUR, FEISHU_PLAN_PREFETCH_MIN,
     FEISHU_RESONANCE_HOUR, FEISHU_RESONANCE_MIN, REALTIME_INTERVAL_SEC,
     SENTIMENT_FETCH_HOUR, SENTIMENT_FETCH_MIN,
 )
+from scheduler.perpetual_notify import task_notify_perpetual_timing
 from scheduler.portfolio_notify import (
     task_notify_next_day_plan, task_prefetch_plan_data,
 )
@@ -83,6 +85,8 @@ def _register_jobs() -> None:
                       FEISHU_PLAN_PREFETCH_HOUR, FEISHU_PLAN_PREFETCH_MIN)
     _add_trading_cron(task_notify_next_day_plan, "notify_next_day_plan",
                       FEISHU_NOTIFY_HOUR, FEISHU_NOTIFY_MIN)
+    _add_trading_cron(task_notify_perpetual_timing, "notify_perpetual_timing",
+                      FEISHU_PERPETUAL_HOUR, FEISHU_PERPETUAL_MIN)
     scheduler.add_job(
         task_cleanup, CronTrigger(hour=2, minute=0),
         id="cleanup", replace_existing=True,

@@ -4,6 +4,9 @@ import urllib.request
 
 from config import FEISHU_NOTIFY_TIMEOUT_SEC
 
+# 飞书 webhook 直连，不受本机 HTTP(S)_PROXY 影响（避免代理未开导致 Connection refused）
+_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
 
 def send_feishu_text(webhook_url: str, text: str) -> bool:
     payload = json.dumps({
@@ -17,9 +20,7 @@ def send_feishu_text(webhook_url: str, text: str) -> bool:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(
-            request, timeout=FEISHU_NOTIFY_TIMEOUT_SEC,
-        ) as response:
+        with _OPENER.open(request, timeout=FEISHU_NOTIFY_TIMEOUT_SEC) as response:
             result = json.loads(response.read().decode("utf-8"))
         if result.get("code") == 0:
             return True

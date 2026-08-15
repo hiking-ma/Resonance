@@ -212,6 +212,9 @@ export FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/..."
 生成**今日**操作计划（周一对应上周五信号）。有操作时发送买入、加仓、减仓或清仓计划，
 无操作也发送回执；数据未齐或存在待确认计划时发送明确提示。执行后需到「我的仓位」手动确认。
 
+交易日 10:00 另发一条**永续组合**独立提醒：以 510300 策略买卖点驱动全进全出。
+若上一交易日刚出现买入/卖出信号，分别提示「全仓买入 / 全仓卖出永续组合」；否则提示保持全仓或继续空仓观望。需到 iFund 手动执行。
+
 ---
 
 ## 十、定时任务
@@ -226,6 +229,7 @@ export FEISHU_WEBHOOK_URL="https://open.feishu.cn/open-apis/bot/v2/hook/..."
 | fetch_sentiment | 周一至周五 16:00 | 成交额 + 融资余额 |
 | prefetch_plan_data | 周一至周五 08:00 | 开盘前再补拉份额/情绪（供出计划） |
 | notify_next_day_plan | 周一至周五 08:30 | 飞书今日操作计划或状态回执 |
+| notify_perpetual_timing | 周一至周五 10:00 | 飞书永续组合（510300 择时）提醒 |
 | sync_calendar | 每周日 20:00 | 交易日历 |
 | cleanup | 每日 02:00 | 清理 7 天前实时快照 |
 
