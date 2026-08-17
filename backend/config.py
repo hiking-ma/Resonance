@@ -111,6 +111,8 @@ FEISHU_NOTIFY_MIN = 30
 FEISHU_PERPETUAL_HOUR = 10
 FEISHU_PERPETUAL_MIN = 0
 FEISHU_NOTIFY_TIMEOUT_SEC = 10
+# 定时任务允许迟到秒数：默认 1s 时，盘中 realtime_poll 占线程会导致 cron 被判定 misfire 跳过
+SCHEDULER_MISFIRE_GRACE_SEC = 600
 
 # 交易策略 / 回测模块
 STRATEGY_CODE = "510300"           # 默认策略标的

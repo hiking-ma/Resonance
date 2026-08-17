@@ -1,6 +1,8 @@
 from datetime import datetime
 from typing import Callable
 
+from apscheduler.events import EVENT_JOB_MISSED, JobExecutionEvent
+from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -11,7 +13,7 @@ from config import (
     FEISHU_PERPETUAL_HOUR, FEISHU_PERPETUAL_MIN,
     FEISHU_PLAN_PREFETCH_HOUR, FEISHU_PLAN_PREFETCH_MIN,
     FEISHU_RESONANCE_HOUR, FEISHU_RESONANCE_MIN, REALTIME_INTERVAL_SEC,
-    SENTIMENT_FETCH_HOUR, SENTIMENT_FETCH_MIN,
+    SCHEDULER_MISFIRE_GRACE_SEC, SENTIMENT_FETCH_HOUR, SENTIMENT_FETCH_MIN,
 )
 from scheduler.perpetual_notify import task_notify_perpetual_timing
 from scheduler.portfolio_notify import (
@@ -28,7 +30,21 @@ from store.calendar_repo import get_calendar_count, reload_cache
 from store.database import init_db
 from store.sentiment_repo import get_margin_count, get_turnover_count
 
-scheduler = AsyncIOScheduler()
+scheduler = AsyncIOScheduler(
+    executors={"default": ThreadPoolExecutor(4)},
+    job_defaults={
+        "coalesce": True,
+        "max_instances": 1,
+        "misfire_grace_time": SCHEDULER_MISFIRE_GRACE_SEC,
+    },
+)
+
+
+def _on_job_missed(event: JobExecutionEvent) -> None:
+    print(
+        f"[SCHEDULER] missed job {event.job_id} "
+        f"(scheduled {event.scheduled_run_time})"
+    )
 
 
 def _bootstrap() -> None:
@@ -106,6 +122,7 @@ def _register_jobs() -> None:
 def start_scheduler() -> None:
     _bootstrap()
     _register_jobs()
+    scheduler.add_listener(_on_job_missed, EVENT_JOB_MISSED)
     scheduler.start()
     print("[SCHEDULER] started")
 
